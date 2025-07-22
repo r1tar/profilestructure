@@ -3,37 +3,42 @@
 
 ## クイックスタート
 ```python
-from profilestructure import ProfileStructure as ProStruct
+from profilestructure import ProfileStructure
 
 db = {
     "secret_info": {
-        "item_a": {
-            "id": 1
-        }
+        "user": [1, 3, 5, 7, 11]
     },
     "public_info": {
+        "item_a": {
+            "id": 1
+        },
         "item_b": {
             "id": 2
         }
     },
     "log": [...]
 }
+profiles = {
+    "secret": ["secret_info"],
+    "public": ["public_info"]
+}
 
-profiled_db = ProStruct(db, profiles={"secret": ["secret_info"], "public": ["public_info"]})
+profiled_db = ProfileStructure(db, profiles=profiles)
 
 profiled_db.get("secret")
 """
 {
-    "secret"_info": {...}
+    "secret_info": {
+        "user": [1, 3, 5, 7, 11]
+    }
 }
 """
 
 profiled_db.get("secret", "secret_info")
 """
 {
-    "item_a": {
-        "id": 1
-    }
+    "user": [1, 3, 5, 7, 11]
 }
 """
 

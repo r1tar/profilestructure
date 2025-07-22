@@ -14,15 +14,27 @@ class ProfileStructure:
 
         structureがlistの場合、それぞれのprofileの値であるリストの内容はstructureのインデックスとして解釈される。
         """
+        # TODO: 複数のプロファイルが同じkeyを指定した場合の挙動をどうするかを決定する
+        # 同じ値を共有するように実装したいが方法が不明
+        # 現在はそれぞれに値を代入しているので変更があった際に同期されない
+        # 
+
+        # HACK: コードの大部分が重複している
         if isinstance(structure, dict):
             profiles_key = defaultdict(dict)
-            for p, k in profiles.items():
-                profiles_key[p][k] = structure.get(k, default)
+            for p, keys in profiles.items():
+                for k in keys:
+                    if p not in profiles_key:
+                        self.create_profile(p, {}, strict=True)
+                    profiles_key[p][k] = structure.get(k, default)
             return dict(profiles_key)
         elif isinstance(structure, list):
              profiles_key = defaultdict(dict)
-             for p, i in profiles.items():
-                profiles_key[p][k] = structure[i] if 0 <= i < len(structure) else default
+             for p, indexes in profiles.items():
+                for i in indexes:
+                    if p not in profiles_key:
+                        self.create_profile(p, {}, strict=True)
+                    profiles_key[p][k] = structure[i] if 0 <= i < len(structure) else default
              return dict(profiles_key)
         else:
             raise UnsupportedTypeError("Structure must be a dict or list")
