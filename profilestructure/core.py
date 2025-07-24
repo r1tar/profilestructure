@@ -16,7 +16,8 @@ class ProfileStructure:
 
         structureがlistの場合、それぞれのprofileの値であるリストの内容はstructureのインデックスとして解釈される。
         """
-        # TODO: 複数のプロファイルが同じkeyを指定した場合の挙動をどうするかを決定する
+        
+        # [ : 複数のプロファイルが同じkeyを指定した場合の挙動をどうするかを決定する
         # 同じ値を共有するように実装したいがコストが嵩む
         # また、一度ｐrofileやkeyが消去された場合の挙動も決定する必要がある
         # 現在はそれぞれに値を代入しているので変更があった際に同期されない
@@ -67,6 +68,14 @@ class ProfileStructure:
                 profiles_key[profile][key] = value_to_assign
         
         return dict(profiles_key)
+
+    @property
+    def profiles(self) -> dict[str, Any]:
+        """
+        Get the profiles.
+        """
+        return self._profiles
+    
     def get(self, profile, key=None, default=None):
         """
         Get the value for a specific profile and key.
@@ -95,15 +104,26 @@ class ProfileStructure:
             if strict:
                 raise UnknownProfileError(f"Profile '{profile}' or key '{key}' does not exist.")
             self.create_profile(profile, {}, strict=True)
-        if key:
-            # keyの内容を更新
-            self._profiles[profile][key] = value
-        else:
-            # profileの内容を上書き
-            # valueがdictでないと機能しなくなるのでUnsupportedTypeErrorを送出
-            if not isinstance(value, dict):
+
+        # keyがNoneの場合(プロファイルの更新）を先に処理したほうがまとまりやすい
+        if not key:
+            # keyがNoneの場合はプロファイル全体を更新
+            if isinstance(value, dict):
+                self._profiles[profile] = value
+                return
+            else:
                 raise UnsupportedTypeError("Value must be a dict when key is None")
-            self._profiles[profile] = value
+            
+        # keyの内容を更新
+        unchanged_value = self.get(profile, key)
+        if isinstance(unchanged_value, SharedKeysValue):
+            # SharedKeysValueの場合は値を更新
+            if key not in unchanged_value.keys:
+                unchanged_value.keys.append(key)
+            self._profiles[profile][key].value = value
+        else:
+            # 通常の値の場合はそのまま更新
+            self._profiles[profile][key] = value
 
     def create_profile(self, profile, value=None, strict: bool = False) -> None:
         """
@@ -154,6 +174,41 @@ class ProfileStructure:
                 raise UnknownProfileError(f"Profile '{new_name}' already exists.")
 
         self._profiles[new_name] = self._profiles.pop(profile)
+    
+    def add_key(self, profile, key, value=None, overwrite: bool = False) -> None:
+        """
+        Add a key to a profile.
+        """
+        if not self.has(profile):
+            raise UnknownProfileError(f"Profile '{profile}' does not exist.")
+
+        if self.has(profile, key):
+            if not overwrite:
+                raise DuplicatedKeyError(f"Key '{key}' already exists in profile '{profile}'.")
+
+        self._profiles[profile][key] = value
+
+    def remove_key(self, profile, key, strict: bool = False) -> None:
+        """
+        Remove a key from a profile.
+        """
+        if not self.has(profile, key):
+            if strict:
+                raise UnknownKeyError(f"Key '{key}' or profile '{profile} does not exist.")
+            return
+
+        del self._profiles[profile][key]
+    
+    def pop_key(self, profile, key, default=None, strict: bool = False) -> Any:
+        """
+        Pop a key from a profile.
+        """
+        if not self.has(profile, key):
+            if strict:
+                raise UnknownKeyError(f"Key '{key}' or profile '{profile} does not exist.")
+            return default
+
+        return self.get(profile).pop(key, default)
     
     def change_key_name(self, profile, key, new_name, overwrite: bool = False) -> None:
         """
