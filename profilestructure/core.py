@@ -9,7 +9,7 @@ class ProfileStructure:
     def __init__(self, structure: dict[str, Any]|list[Any], profiles: dict[str, list[str|int]], default: Any = None):
         self._profiles = self._profile(structure, profiles, default)
 
-    def _profile(self, structure: dict[str, Any]|list[Any], profiles: dict[str, list[str|int]], default: Any) -> dict:
+    def _profile(self, structure: dict[str, Any]|list[Any], profiles: dict[str, list[str|int]], default: Any, unshare_values: bool = False) -> dict:
         """
         プロファイルをkeyとするdictを返す
         ex) {"p1": {...} "p2": {...}}
@@ -17,7 +17,7 @@ class ProfileStructure:
         structureがlistの場合、それぞれのprofileの値であるリストの内容はstructureのインデックスとして解釈される。
         """
         
-        # [ : 複数のプロファイルが同じkeyを指定した場合の挙動をどうするかを決定する
+        # [x] 複数のプロファイルが同じkeyを指定した場合の挙動をどうするかを決定する
         # 同じ値を共有するように実装したいがコストが嵩む
         # また、一度ｐrofileやkeyが消去された場合の挙動も決定する必要がある
         # 現在はそれぞれに値を代入しているので変更があった際に同期されない
@@ -25,10 +25,12 @@ class ProfileStructure:
         # 案2: 重複を許可し、重複するkeyの値を別に保持して変更時に反映させる   複雑化、変更時のコストが増える　listやclassなどを使用すれば単純化できる
         # 案3: 重複を許可し、別の値として扱う                                一番シンプルで分かりやすい
         # 結論: 案2を採用しSharedKeysValueクラスを使用して値を共有することに決定
+        # [x] 値の共有を解除する方法を作る
+        # [x] _profileの引数に案3を適用できるものを追加する
 
         # 値を共有するkeyのリストを作成
         all_keys_in_profiles = [set(keys_list) for keys_list in list(profiles.values())]
-        if len(profiles.keys()) < 2:
+        if not unshare_values or len(profiles.keys()) < 2:
             # set.intersection()はset型がindexが扱いづらいのでtupleに統一
             keys_intersection = tuple()
             shared_values = []
@@ -48,7 +50,7 @@ class ProfileStructure:
         for profile, keys in profiles.items():
             for key in keys:
                 if profile not in profiles_key:
-                    self.create_profile(profile, {}, strict=True)
+                    profiles_key[profile] = {}
 
                 # keyが共有されている場合、shared_valuesから値を取得
                 # 共有されていない場合はそのままstructureから取得し、インスタンスをshared_valuesに追加
@@ -92,7 +94,7 @@ class ProfileStructure:
         プロファイルが存在するか、またはプロファイル内に特定のキーが存在するかを返す。
         """
         if key:
-            return key in self._profiles.get(profile, {})
+            return key in self.get(profile, default={})
         else:
             return profile in self._profiles
         
@@ -133,7 +135,7 @@ class ProfileStructure:
             if strict:
                 raise UnknownProfileError(f"Profile '{profile}' already exists.")
             return
-        self._profiles[profile] = value
+        self.set(profile, value, strict=False)
 
     def delete_profile(self, profile, strict: bool = False) -> None:
         """
@@ -162,18 +164,24 @@ class ProfileStructure:
 
         self._profiles[new_profile][key] = self._profiles[old_profile].pop(key)
 
-    def change_profile_name(self, profile, new_name, overwrite: bool = False) -> None:
+    def profile_names(self) -> list[str]:
+        """
+        Get a list of profile names.
+        """
+        return list(self._profiles.keys())
+    
+    def change_profile_name(self, old_name, new_name, overwrite: bool = False) -> None:
         """
         Change the name of a profile.
         """
-        if not self.has(profile):
-            raise UnknownProfileError(f"Profile '{profile}' does not exist.")
+        if not self.has(old_name):
+            raise UnknownProfileError(f"Profile '{old_name}' does not exist.")
 
         if self.has(new_name):
             if not overwrite:
                 raise UnknownProfileError(f"Profile '{new_name}' already exists.")
 
-        self._profiles[new_name] = self._profiles.pop(profile)
+        self._profiles[new_name] = self._profiles.pop(old_name)
     
     def add_key(self, profile, key, value=None, overwrite: bool = False) -> None:
         """
@@ -186,7 +194,7 @@ class ProfileStructure:
             if not overwrite:
                 raise DuplicatedKeyError(f"Key '{key}' already exists in profile '{profile}'.")
 
-        self._profiles[profile][key] = value
+        self.set(profile, value, key=key, strict=False)
 
     def remove_key(self, profile, key, strict: bool = False) -> None:
         """
@@ -210,18 +218,60 @@ class ProfileStructure:
 
         return self.get(profile).pop(key, default)
     
-    def change_key_name(self, profile, key, new_name, overwrite: bool = False) -> None:
+    def key_names(self, profile) -> list[str]:
+        """
+        Get a list of key names for a specific profile.
+        """
+        if not self.has(profile):
+            raise UnknownProfileError(f"Profile '{profile}' does not exist.")
+        
+        return list(self._profiles[profile].keys())
+    
+    def change_key_name(self, profile, old_name, new_name, overwrite: bool = False) -> None:
         """
         Change the name of a key in a profile.
         """
-        if not self.has(profile, key):
-            raise UnknownKeyError(f"Key '{key}' does not exist in profile '{profile}'.")
+        if not self.has(profile, old_name):
+            raise UnknownKeyError(f"Key '{old_name}' does not exist in profile '{profile}'.")
 
         if new_name in self._profiles[profile]:
             if not overwrite:
                 raise DuplicatedKeyError(f"Key '{new_name}' already exists in profile '{profile}'.")
 
-        self._profiles[profile][new_name] = self.get(profile).pop(key)
+        self._profiles[profile][new_name] = self.get(profile).pop(old_name)
+
+    def share_key_value(self, profile, key, other_keys: list[str], overwrite: bool = False, strict: bool = False) -> None:
+        """
+        Share the value of a key across profiles.
+        """
+        if not self.has(profile, key):
+            raise UnknownKeyError(f"Key '{key}' or profile '{profile}' does not exist.")
+
+        # 共有されていない場合はSharedKeysValueに置き換える
+        current_value = self.get(profile, key)
+        if not isinstance(current_value, SharedKeysValue):
+            if not isinstance(other_keys, list):
+                raise UnsupportedTypeError("other_keys must be a list of keys to share.")
+            shared_value = SharedKeysValue(keys=[key] + other_keys, value=current_value)
+            for profile in self._profiles:
+                for key in shared_value.keys:
+                    if not overwrite and key in self._profiles[profile]:
+                        raise DuplicatedKeyError(f"Key '{key}' already exists in profile '{profile}'.")
+                    self.set(profile, shared_value, key=key, strict=True)
+
+    def unshare_key_value(self, profile, key, strict: bool = False) -> None:
+        """
+        Unshare the value of a key in a profile.
+        """
+        if not self.has(profile, key):
+            raise UnknownKeyError(f"Key '{key}' or profile '{profile}' does not exist.")
+
+        current_value = self.get(profile, key)
+        if isinstance(current_value, SharedKeysValue):
+            for profile in self._profiles:
+                for key in current_value.keys:
+                    if key in self._profiles[profile]:
+                        self.set(profile, current_value, key=key, strict=True)
 
     def asdict(self, allow_duplicates: bool = True) -> dict:
         """
