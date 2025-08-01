@@ -31,7 +31,7 @@ class TestProfileStructureWithDict(TestCase):
         del self.test_profiles
     
     def test_get_profile_structure(self):
-        # pprint(self.profile_structure.profiles)
+        pprint(self.profile_structure.profiles)
         pass
 
     def test_has_profile(self):
@@ -95,5 +95,6 @@ class TestProfileStructureWithDict(TestCase):
         self.assertNotIn(new_key, self.profile_structure.key_names(profile))
         self.assertEqual(data_after_key_changed, unchanged_value)
 
+    
 if __name__ == "__main__":
     unittest.main()
