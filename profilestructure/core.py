@@ -158,7 +158,7 @@ class ProfileStructure:
 
         self.set(
             new_profile,
-            self.pop_key(old_profile, key, default=None, allow_nonexisting_profile_and_key=False),
+            self.pop_key(old_profile, key, default=None, allow_nonexistent_profile_and_key=False),
             key=key,
             allow_nonexistent_profile_and_key=False)
         
@@ -194,11 +194,11 @@ class ProfileStructure:
 
         self.set(profile, value, key=key, allow_nonexistent_profile_and_key=True)
 
-    def pop_key(self, profile, key, default=None, allow_nonexisting_profile_and_key: bool = True) -> Any:
+    def pop_key(self, profile, key, default=None, allow_nonexistent_profile_and_key: bool = True) -> Any:
         """
         Pop a key from a profile.
         """
-        if not (self.has(profile, key) or allow_nonexisting_profile_and_key):
+        if not (self.has(profile, key) or allow_nonexistent_profile_and_key):
             raise UnknownKeyError(f"Key '{key}' or profile '{profile} does not exist.")
 
         return self.get(profile, default={}).pop(key, default)
@@ -207,7 +207,7 @@ class ProfileStructure:
         """
         Remove a key from a profile.
         """
-        self.pop_key(profile, key, default=None, allow_nonexisting_profile_and_key=allow_unexisting_profile_and_key)
+        self.pop_key(profile, key, default=None, allow_nonexistent_profile_and_key=allow_unexisting_profile_and_key)
         
     def key_names(self, profile) -> list[str]:
         """
